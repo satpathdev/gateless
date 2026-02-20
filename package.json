@@ -1,0 +1,49 @@
+{
+  "name": "gateless",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Sovereign L402 payments for AI agents on Lightning",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "test": "tsc && node dist/test/test-e2e.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "lightning",
+    "bitcoin",
+    "l402",
+    "lsat",
+    "macaroon",
+    "ai-agent",
+    "payments",
+    "lnd",
+    "micropayments"
+  ],
+  "author": "satpath",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/satpathdev/gateless"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "typescript": "^5.9.3"
+  }
+}
