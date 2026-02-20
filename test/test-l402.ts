@@ -1,4 +1,4 @@
-// Manual integration test — requires:
+// Manual integration test - requires:
 // 1. LND node running with REST API on localhost:8080 (SSH tunnel)
 // 2. A working L402 endpoint (update URL below)
 // Run: npx tsc && node dist/test/test-l402.js

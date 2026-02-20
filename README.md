@@ -146,16 +146,16 @@ Gateless and lnget are complementary. lnget is for terminal-based agents (Claude
 
 ## Roadmap
 
-- [x] LND REST payment provider
-- [x] L402 fetch client with automatic payment
-- [x] Token caching
-- [x] Spending limits and rate controls
-- [ ] Nostr Wallet Connect (NWC) payment provider
-- [ ] Lightning Node Connect (LNC) provider
-- [ ] Nostr endpoint discovery
-- [ ] React hooks (`useL402Fetch`)
-- [ ] Macaroon attenuation and inspection
-- [ ] Server-side middleware (Aperture alternative in JS)
+- ✅ LND REST payment provider
+- ✅ L402 fetch client with automatic payment
+- ✅ Token caching
+- ✅ Spending limits and rate controls
+- ⬜ Nostr Wallet Connect (NWC) payment provider
+- ⬜ Lightning Node Connect (LNC) provider
+- ⬜ Nostr endpoint discovery
+- ⬜ React hooks (`useL402Fetch`)
+- ⬜ Macaroon attenuation and inspection
+- ⬜ Server-side middleware (Aperture alternative in JS)
 
 ## Requirements
 
