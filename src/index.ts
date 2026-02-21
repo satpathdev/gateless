@@ -7,3 +7,10 @@ export type { CachedToken } from "./token-cache.js";
 export type { PaymentProvider, PaymentResult } from "./payment-provider.js";
 export type { SpendingLimit, SpendingRecord } from "./spending.js";
 export { L402BudgetError, L402PaymentError, L402ProtocolError } from "./errors.js";
+export type {
+  FewsatsOffer,
+  FewsatsPaymentRequired,
+  FewsatsPaymentRequestResponse,
+  OfferStrategy,
+} from "./fewsats.js";
+export { selectCheapestLightningOffer } from "./fewsats.js";
