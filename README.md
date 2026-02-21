@@ -225,6 +225,19 @@ Gateless and lnget are complementary. lnget is for terminal-based agents (Claude
 - An LND node (v0.16+) with REST API enabled
 - A funded Lightning channel
 
+### LND Credentials
+
+Gateless needs two files from your LND node:
+
+- **TLS certificate** — usually at `~/.lnd/tls.cert`
+- **Admin macaroon** — usually at `~/.lnd/data/chain/bitcoin/mainnet/admin.macaroon`
+
+Copy them to your project (e.g. a `creds/` directory) and point `LndClient` at them. If your node is on a different machine, use an SSH tunnel to forward the REST port:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 user@your-node-ip
+```
+
 ## ⚠️ Disclaimer
 
 Gateless is experimental software. It interacts with real Bitcoin on the Lightning Network. By using this software you accept full responsibility for any funds sent or lost. Always start with small amounts, use spending limits, and test thoroughly before deploying in any production environment. This software is provided as-is with no warranty of any kind.

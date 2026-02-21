@@ -233,7 +233,22 @@ export class L402Client {
 
     this.spending?.record(amountSats, url);
 
-    // Retry with original headers - Bearer token is the credential in v0.2
+    const maxRetries = 5;
+    const baseDelayMs = 500;
+
+    for (let i = 0; i < maxRetries; i++) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, baseDelayMs * (i + 1)),
+      );
+      const retryResponse = await fetch(url, init);
+      if (retryResponse.status !== 402) {
+        return retryResponse;
+      }
+      // Still 402 — server hasn't credited yet, try again
+      await retryResponse.body?.cancel();
+    }
+
+    // All retries exhausted — return whatever the server gives
     return fetch(url, init);
   }
 
