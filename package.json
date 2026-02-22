@@ -1,5 +1,5 @@
 {
-  "name": "gateless",
+  "name": "@satpath/gateless",
   "version": "0.1.0",
   "type": "module",
   "description": "Sovereign L402 payments for AI agents on Lightning",

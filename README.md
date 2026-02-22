@@ -13,7 +13,7 @@ Gateless fills the gap: a self-contained JS/TS toolkit that connects to **your o
 ## Install
 
 ```bash
-npm install gateless
+npm install @satpath/gateless
 ```
 
 ## Quick Start
