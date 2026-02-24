@@ -126,17 +126,7 @@ export class L402Client {
   ): Promise<Response> {
     const { macaroon, invoice } = this.parseWwwAuthenticate(wwwAuth);
 
-    const amountSats = this.paymentProvider.getInvoiceAmountSats
-      ? await this.paymentProvider.getInvoiceAmountSats(invoice)
-      : this.decodeInvoiceAmountLocal(invoice);
-
-    if (amountSats > this.maxPaymentSats) {
-      throw new L402BudgetError(
-        `Invoice amount ${amountSats} sats exceeds limit of ${this.maxPaymentSats} sats`,
-      );
-    }
-
-    this.spending?.check(amountSats);
+    const amountSats = await this.validateAndCheckBudget(invoice);
 
     let resolveInflight: () => void;
     const paymentPromise = new Promise<void>((r) => {
@@ -212,17 +202,7 @@ export class L402Client {
     }
 
     // Validate invoice amount against spending limits
-    const amountSats = this.paymentProvider.getInvoiceAmountSats
-      ? await this.paymentProvider.getInvoiceAmountSats(invoice)
-      : this.decodeInvoiceAmountLocal(invoice);
-
-    if (amountSats > this.maxPaymentSats) {
-      throw new L402BudgetError(
-        `Invoice amount ${amountSats} sats exceeds limit of ${this.maxPaymentSats} sats`,
-      );
-    }
-
-    this.spending?.check(amountSats);
+    const amountSats = await this.validateAndCheckBudget(invoice);
 
     try {
       await this.paymentProvider.payInvoice(invoice);
@@ -250,6 +230,35 @@ export class L402Client {
 
     // All retries exhausted — return whatever the server gives
     return fetch(url, init);
+  }
+
+  /**
+   * Validate an invoice amount against maxPaymentSats and spending limits.
+   * Returns the amount in sats. Wraps provider errors in L402PaymentError.
+   */
+  private async validateAndCheckBudget(invoice: string): Promise<number> {
+    let amountSats: number;
+    try {
+      amountSats = this.paymentProvider.getInvoiceAmountSats
+        ? await this.paymentProvider.getInvoiceAmountSats(invoice)
+        : this.decodeInvoiceAmountLocal(invoice);
+    } catch (error) {
+      if (error instanceof L402BudgetError || error instanceof L402ProtocolError) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      throw new L402PaymentError(`Failed to decode invoice amount: ${message}`);
+    }
+
+    if (amountSats > this.maxPaymentSats) {
+      throw new L402BudgetError(
+        `Invoice amount ${amountSats} sats exceeds limit of ${this.maxPaymentSats} sats`,
+      );
+    }
+
+    this.spending?.check(amountSats);
+
+    return amountSats;
   }
 
   private parseWwwAuthenticate(header: string): {
