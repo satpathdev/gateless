@@ -2,13 +2,13 @@
 
 Sovereign L402 payments for AI agents on Lightning.
 
-Gateless is a JavaScript/TypeScript library that lets AI agents in Node.js autonomously pay for L402-protected web resources over the Lightning Network. Supports both the classic L402 protocol (macaroon + invoice) and Fewsats L402 v0.2 (offers + payment request). You run your own node. Your agent handles payments within spending limits you define. No accounts, no API keys, no identity - payment is authentication.
+Gateless is a JavaScript/TypeScript library that lets AI agents in Node.js autonomously pay for L402-protected web resources over the Lightning Network. Supports both the classic L402 protocol (macaroon + invoice) and Fewsats L402 v0.2 (offers + payment request). Connect your own LND node directly or any NWC-compatible wallet (Alby Hub, etc.). Your agent handles payments within spending limits you define. No accounts, no API keys, no identity - payment is authentication.
 
 ## Why
 
 AI agents need to pay for things. The emerging solutions either lock you into custodial stablecoins ([x402](https://www.x402.org/)) or require shell access to Go CLI tools ([lnget](https://github.com/lightninglabs/lightning-agent-tools)). Neither works for a web developer building an agent in TypeScript.
 
-Gateless fills the gap: a self-contained JS/TS toolkit that connects to **your own LND node** and handles L402 payments programmatically. No custodian, no corporate infrastructure, your keys.
+Gateless fills the gap: a self-contained JS/TS toolkit that connects to **your own LND node** or any **NWC-compatible wallet** (Alby Hub, etc.) and handles L402 payments programmatically. No custodian, no corporate infrastructure, your keys.
 
 ## Install
 
@@ -19,7 +19,7 @@ npm install @satpath/gateless
 ## Quick Start
 
 ```typescript
-import { LndClient, L402Client } from "gateless";
+import { LndClient, L402Client } from "@satpath/gateless";
 
 const lnd = new LndClient({
   host: "127.0.0.1",
@@ -42,6 +42,31 @@ const client = new L402Client({
 const response = await client.fetch("https://api.example.com/paid-resource");
 const data = await response.json();
 ```
+
+### Using NWC (Nostr Wallet Connect)
+
+No LND node? Use any NWC-compatible wallet (Alby Hub, Mutiny, etc.) instead:
+
+```typescript
+import { NwcClient, L402Client } from "@satpath/gateless";
+
+const nwc = new NwcClient({
+  connectionString: "nostr+walletconnect://pubkey?relay=wss://...&secret=hex",
+});
+
+const client = new L402Client({
+  paymentProvider: nwc,
+  maxPaymentSats: 100,
+});
+
+const response = await client.fetch("https://api.example.com/paid-resource");
+const data = await response.json();
+
+// When done, disconnect from the relay
+nwc.close();
+```
+
+Get the connection string from your wallet's NWC settings (usually under "App Connections" or "Nostr Wallet Connect").
 
 If the server returns `402 Payment Required`, Gateless automatically detects the protocol version and handles payment:
 
@@ -69,7 +94,7 @@ const data = await response.json();
 You can customize which offer is selected when multiple are available:
 
 ```typescript
-import { L402Client, type OfferStrategy } from "gateless";
+import { L402Client, type OfferStrategy } from "@satpath/gateless";
 
 const pickMostCredits: OfferStrategy = (offers) => {
   const lightning = offers.filter((o) =>
@@ -97,7 +122,7 @@ const client = new L402Client({
 
 **Spending Controls** - Set per-payment limits, total budgets, and rate limits. Applies to both classic and v0.2 flows. An AI agent physically cannot exceed the budget you define.
 
-**Payment Provider Interface** - Ships with an LND client over REST. Bring your own provider by implementing a simple interface:
+**Payment Provider Interface** - Ships with LND (REST) and NWC (Nostr Wallet Connect) providers. Bring your own by implementing a simple interface:
 
 ```typescript
 interface PaymentProvider {
@@ -181,14 +206,14 @@ No accounts. No passwords. No tracking. Payment is the authentication.
 ┌────────────────▼────────────────────────┐
 │         PaymentProvider                 │
 │                                         │
-│  LndClient  │  (NWC - planned)          │
-│  REST API   │  (LNC - planned)          │
-└────────────────┬────────────────────────┘
-                 │
-┌────────────────▼────────────────────────┐
-│          Your LND Node                  │
-│          (your keys, your node)         │
-└─────────────────────────────────────────┘
+│  LndClient  │  NwcClient               │
+│  REST API   │  Nostr Wallet Connect    │
+└───────┬─────────────┬──────────────────┘
+        │             │
+┌───────▼───────┐ ┌───▼──────────────────┐
+│ Your LND Node │ │ NWC Wallet           │
+│ (your keys)   │ │ (Alby Hub, etc.)     │
+└───────────────┘ └──────────────────────┘
 ```
 
 ## Comparison
@@ -198,7 +223,7 @@ No accounts. No passwords. No tracking. Payment is the authentication.
 | Language          | TypeScript          | Go                     | Multiple               |
 | Runtime           | Node.js             | CLI only               | Server SDKs            |
 | Payment rail      | Lightning (Bitcoin) | Lightning (Bitcoin)    | USDC (stablecoins)     |
-| Node              | Your own LND        | Your own LND           | Coinbase custody       |
+| Node              | Your own LND or NWC | Your own LND           | Coinbase custody       |
 | Identity required | No                  | No                     | Yes (Coinbase account) |
 | npm install       | Yes                 | No                     | Yes                    |
 | Self-sovereign    | Yes                 | Yes                    | No                     |
@@ -212,7 +237,7 @@ Gateless and lnget are complementary. lnget is for terminal-based agents (Claude
 - ✅ Token caching
 - ✅ Spending limits and rate controls
 - ✅ Fewsats L402 v0.2 support (offers, payment requests, pluggable offer strategy)
-- ⬜ Nostr Wallet Connect (NWC) payment provider
+- ✅ Nostr Wallet Connect (NWC) payment provider
 - ⬜ Lightning Node Connect (LNC) provider
 - ⬜ Nostr endpoint discovery
 - ⬜ React hooks (`useL402Fetch`)
@@ -222,21 +247,26 @@ Gateless and lnget are complementary. lnget is for terminal-based agents (Claude
 ## Requirements
 
 - Node.js 18+
-- An LND node (v0.16+) with REST API enabled
-- A funded Lightning channel
+- One of:
+  - An LND node (v0.16+) with REST API enabled and a funded Lightning channel, **or**
+  - An NWC connection string from any NWC-compatible wallet (Alby Hub, etc.)
 
 ### LND Credentials
 
-Gateless needs two files from your LND node:
+If using LND directly, Gateless needs two files from your node:
 
-- **TLS certificate** — usually at `~/.lnd/tls.cert`
-- **Admin macaroon** — usually at `~/.lnd/data/chain/bitcoin/mainnet/admin.macaroon`
+- **TLS certificate** - usually at `~/.lnd/tls.cert`
+- **Admin macaroon** - usually at `~/.lnd/data/chain/bitcoin/mainnet/admin.macaroon`
 
 Copy them to your project (e.g. a `creds/` directory) and point `LndClient` at them. If your node is on a different machine, use an SSH tunnel to forward the REST port:
 
 ```bash
 ssh -L 8080:127.0.0.1:8080 user@your-node-ip
 ```
+
+### NWC Connection
+
+If using NWC, you just need a connection string from your wallet. No files to copy, no ports to forward. The connection goes through a Nostr relay, so your wallet can be anywhere.
 
 ## ⚠️ Disclaimer
 

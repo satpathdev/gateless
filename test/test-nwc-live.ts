@@ -1,10 +1,12 @@
-import { LndClient, L402Client } from "../src/index.js";
+import { NwcClient } from "../src/nwc.js";
+import { L402Client } from "../src/l402.js";
 
-const lnd = new LndClient({
-  host: "127.0.0.1",
-  port: 8080,
-  tlsCertPath: "./creds/tls.cert",
-  macaroonPath: "./creds/admin.macaroon",
+// Get a connection string from any NWC-compatible wallet:
+//   - Alby Hub: App Connections → Create New → copy connection string
+//   - Mutiny:   Settings → Wallet Connections → Nostr Wallet Connect
+//   - Any NIP-47 wallet that provides a nostr+walletconnect:// URI
+const nwc = new NwcClient({
+  connectionString: "nostr+walletconnect://hidden",
 });
 
 // Step 1: Sign up for a bearer token
@@ -20,13 +22,15 @@ const freeRes = await fetch("https://stock.l402.org/ticker/AAPL", {
 console.log("Free request status:", freeRes.status);
 await freeRes.json();
 
-// Step 3: Now fetch with L402Client - should hit 402, pay, and retry
+// Step 3: Now fetch with NWC-backed L402Client
 const client = new L402Client({
-  paymentProvider: lnd,
+  paymentProvider: nwc,
   maxPaymentSats: 100,
 });
 
-console.log("\nFetching /ticker/MSFT via gateless (should pay lightning)...");
+console.log(
+  "\nFetching /ticker/MSFT via gateless+NWC (should pay lightning)...",
+);
 
 try {
   const res = await client.fetch("https://stock.l402.org/ticker/MSFT", {
@@ -35,7 +39,9 @@ try {
   console.log("Status:", res.status);
   const data = await res.json();
   console.log("Data:", JSON.stringify(data, null, 2));
-  console.log("\nLive L402 test passed!");
+  console.log("\nLive NWC test passed!");
 } catch (error) {
   console.error("Error:", error);
+} finally {
+  nwc.close();
 }

@@ -224,11 +224,11 @@ export class L402Client {
       if (retryResponse.status !== 402) {
         return retryResponse;
       }
-      // Still 402 — server hasn't credited yet, try again
+      // Still 402 - server hasn't credited yet, try again
       await retryResponse.body?.cancel();
     }
 
-    // All retries exhausted — return whatever the server gives
+    // All retries exhausted - return whatever the server gives
     return fetch(url, init);
   }
 
@@ -243,7 +243,10 @@ export class L402Client {
         ? await this.paymentProvider.getInvoiceAmountSats(invoice)
         : this.decodeInvoiceAmountLocal(invoice);
     } catch (error) {
-      if (error instanceof L402BudgetError || error instanceof L402ProtocolError) {
+      if (
+        error instanceof L402BudgetError ||
+        error instanceof L402ProtocolError
+      ) {
         throw error;
       }
       const message = error instanceof Error ? error.message : String(error);

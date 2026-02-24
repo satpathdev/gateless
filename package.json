@@ -1,6 +1,6 @@
 {
   "name": "@satpath/gateless",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
   "description": "Sovereign L402 payments for AI agents on Lightning",
   "main": "./dist/index.js",
@@ -19,7 +19,7 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "npm run clean && tsc -p tsconfig.build.json",
-    "test": "tsc && node dist/test/test-e2e.js",
+    "test": "tsc && node dist/test/test-e2e.js && node dist/test/test-nwc.js",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -31,6 +31,9 @@
     "ai-agent",
     "payments",
     "lnd",
+    "nwc",
+    "nostr",
+    "nostr-wallet-connect",
     "micropayments"
   ],
   "author": "satpath",
@@ -44,6 +47,11 @@
   },
   "devDependencies": {
     "@types/node": "^25.3.0",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "nostr-tools": "^2.23.1",
+    "ws": "^8.19.0"
   }
 }

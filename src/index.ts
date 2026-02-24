@@ -1,5 +1,7 @@
 export { LndClient } from "./lnd.js";
 export type { LndConfig } from "./lnd.js";
+export { NwcClient, parseConnectionString } from "./nwc.js";
+export type { NwcConfig } from "./nwc.js";
 export { L402Client } from "./l402.js";
 export type { L402ClientConfig } from "./l402.js";
 export { TokenCache } from "./token-cache.js";

@@ -29,7 +29,7 @@ export class LndClient implements PaymentProvider {
   private baseUrl: string;
   private timeoutMs: number;
 
-  constructor(private config: LndConfig) {
+  constructor(config: LndConfig) {
     this.tlsCert = fs.readFileSync(config.tlsCertPath);
     this.macaroon = fs.readFileSync(config.macaroonPath).toString("hex");
     this.baseUrl = `https://${config.host}:${config.port}`;
