@@ -25,7 +25,7 @@ const lnd = new LndClient({
   host: "127.0.0.1",
   port: 8080,
   tlsCertPath: "./creds/tls.cert",
-  macaroonPath: "./creds/admin.macaroon",
+  macaroonPath: "./creds/invoice.macaroon",
 });
 
 const client = new L402Client({
@@ -256,9 +256,16 @@ Gateless and lnget are complementary. lnget is for terminal-based agents (Claude
 If using LND directly, Gateless needs two files from your node:
 
 - **TLS certificate** - usually at `~/.lnd/tls.cert`
-- **Admin macaroon** - usually at `~/.lnd/data/chain/bitcoin/mainnet/admin.macaroon`
+- **Macaroon** - Gateless only needs permission to pay invoices. For best security, bake a restricted macaroon rather than using the admin macaroon:
 
-Copy them to your project (e.g. a `creds/` directory) and point `LndClient` at them. If your node is on a different machine, use an SSH tunnel to forward the REST port:
+```bash
+# Recommended: create a macaroon with only the permissions Gateless needs
+lncli bakemacaroon invoices:read offchain:write --save_to invoice.macaroon
+
+# admin.macaroon works too but grants far broader access than necessary
+```
+
+Copy them to your project (e.g. a `creds/` directory) and point `LndClient` at them. Treat both files as secrets and don't commit them to version control or bake them into container images. If your node is on a different machine, use an SSH tunnel to forward the REST port:
 
 ```bash
 ssh -L 8080:127.0.0.1:8080 user@your-node-ip
