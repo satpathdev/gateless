@@ -5,6 +5,7 @@ import {
   paidBearerTokens,
   resetV02State,
   getLastOfferId,
+  setDelayedRequiredRetries,
 } from "./mock-server.js";
 import type { PaymentProvider } from "../src/payment-provider.js";
 import type { OfferStrategy } from "../src/fewsats.js";
@@ -212,6 +213,47 @@ await assertThrows(
   "L402BudgetError",
   "exceeds limit",
 );
+console.log("PASS");
+
+// ============================================================
+// Retry configuration tests
+// ============================================================
+
+console.log("\n--- v0.2: Custom retry config succeeds when retries sufficient ---");
+resetV02State();
+setDelayedRequiredRetries(2); // server needs 2 retries before granting access
+const tokenRetry1 = "test-bearer-retry-ok";
+const retryClient1 = new L402Client({
+  paymentProvider: v02Provider(tokenRetry1),
+  maxPaymentSats: 2000,
+  maxRetries: 5,
+  retryDelayMs: 50,
+});
+
+const retryRes1 = await retryClient1.fetch("http://localhost:9999/v02/data-delayed", {
+  headers: { Authorization: `Bearer ${tokenRetry1}` },
+});
+assert(retryRes1.status === 200, `Expected 200, got ${retryRes1.status}`);
+const retryBody1 = (await retryRes1.json()) as { data: string };
+assert(retryBody1.data === "delayed content", `Unexpected body: ${retryBody1.data}`);
+console.log("PASS");
+
+console.log("\n--- v0.2: Custom retry config fails when retries insufficient ---");
+resetV02State();
+setDelayedRequiredRetries(5); // server needs 5 retries, but we only allow 1
+const tokenRetry2 = "test-bearer-retry-fail";
+const retryClient2 = new L402Client({
+  paymentProvider: v02Provider(tokenRetry2),
+  maxPaymentSats: 2000,
+  maxRetries: 1,
+  retryDelayMs: 50,
+});
+
+const retryRes2 = await retryClient2.fetch("http://localhost:9999/v02/data-delayed", {
+  headers: { Authorization: `Bearer ${tokenRetry2}` },
+});
+assert(retryRes2.status === 402, `Expected 402 (retries exhausted), got ${retryRes2.status}`);
+await retryRes2.body?.cancel();
 console.log("PASS");
 
 server.close();

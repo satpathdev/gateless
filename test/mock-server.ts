@@ -10,11 +10,21 @@ const MOCK_INVOICE = "lnbc10u1fakeinvoice";
 const paidBearerTokens = new Set<string>();
 let contextTokenCounter = 0;
 let lastOfferId: string | undefined;
+/** Tracks how many retry attempts hit `/v02/data-delayed` per bearer token */
+const delayedRetryCount = new Map<string, number>();
+/** Number of 402s to return before granting access on `/v02/data-delayed` */
+let delayedRequiredRetries = 3;
 
 export function resetV02State(): void {
   paidBearerTokens.clear();
   contextTokenCounter = 0;
   lastOfferId = undefined;
+  delayedRetryCount.clear();
+  delayedRequiredRetries = 3;
+}
+
+export function setDelayedRequiredRetries(n: number): void {
+  delayedRequiredRetries = n;
 }
 
 export function getLastOfferId(): string | undefined {
@@ -49,6 +59,45 @@ export function startMockServer(port: number): Promise<http.Server> {
     }
 
     // ---- Fewsats v0.2: protected resources ----
+    // ---- Fewsats v0.2: delayed crediting (for retry config tests) ----
+    if (url.pathname === "/v02/data-delayed") {
+      if (auth) {
+        const bearerMatch = auth.match(/^Bearer (.+)$/);
+        if (bearerMatch?.[1] && paidBearerTokens.has(bearerMatch[1])) {
+          const count = (delayedRetryCount.get(bearerMatch[1]) ?? 0) + 1;
+          delayedRetryCount.set(bearerMatch[1], count);
+          if (count > delayedRequiredRetries) {
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ data: "delayed content" }));
+            return;
+          }
+        }
+      }
+
+      const contextToken = `ctx_${++contextTokenCounter}`;
+      res.writeHead(402, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          offers: [
+            {
+              offer_id: "offer_delayed",
+              title: "Delayed",
+              description: "Delayed crediting",
+              amount: 100,
+              balance: 1,
+              currency: "USD",
+              payment_methods: ["lightning"],
+              type: "top-up",
+            },
+          ],
+          payment_context_token: contextToken,
+          payment_request_url: `http://localhost:${port}/v02/payment-request`,
+          version: "0.2.1",
+        }),
+      );
+      return;
+    }
+
     if (
       url.pathname === "/v02/data" ||
       url.pathname === "/v02/data-multi" ||

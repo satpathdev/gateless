@@ -26,6 +26,10 @@ export interface L402ClientConfig {
   spendingLimits?: SpendingLimit;
   /** Strategy for selecting from Fewsats v0.2 offers (default: cheapest lightning-compatible) */
   offerStrategy?: OfferStrategy;
+  /** Maximum retry attempts for Fewsats v0.2 server-side crediting (default: 5) */
+  maxRetries?: number;
+  /** Base delay in ms between retries, scaled by attempt number (default: 500) */
+  retryDelayMs?: number;
 }
 
 export class L402Client {
@@ -35,12 +39,16 @@ export class L402Client {
   private spending: SpendingTracker | undefined;
   private inflightPayments = new Map<string, Promise<void>>();
   private offerStrategy: OfferStrategy;
+  private maxRetries: number;
+  private retryDelayMs: number;
 
   constructor(config: L402ClientConfig) {
     this.paymentProvider = config.paymentProvider;
     this.maxPaymentSats = config.maxPaymentSats ?? 1000;
     this.cache = new TokenCache();
     this.offerStrategy = config.offerStrategy ?? selectCheapestLightningOffer;
+    this.maxRetries = config.maxRetries ?? 5;
+    this.retryDelayMs = config.retryDelayMs ?? 500;
     if (config.spendingLimits) {
       this.spending = new SpendingTracker(config.spendingLimits);
     }
@@ -213,12 +221,9 @@ export class L402Client {
 
     this.spending?.record(amountSats, url);
 
-    const maxRetries = 5;
-    const baseDelayMs = 500;
-
-    for (let i = 0; i < maxRetries; i++) {
+    for (let i = 0; i < this.maxRetries; i++) {
       await new Promise((resolve) =>
-        setTimeout(resolve, baseDelayMs * (i + 1)),
+        setTimeout(resolve, this.retryDelayMs * (i + 1)),
       );
       const retryResponse = await fetch(url, init);
       if (retryResponse.status !== 402) {
