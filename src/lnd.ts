@@ -2,6 +2,11 @@ import fs from "node:fs";
 import https from "node:https";
 
 import type { PaymentProvider, PaymentResult } from "./payment-provider.js";
+import type {
+  CreateInvoiceOptions,
+  Invoice,
+  InvoiceProvider,
+} from "./server/invoice-provider.js";
 
 export type { PaymentResult } from "./payment-provider.js";
 
@@ -23,7 +28,7 @@ export interface LndConfig {
  * Reads the TLS cert and macaroon from disk once at construction.
  * The macaroon is sent as a hex-encoded header on every request.
  */
-export class LndClient implements PaymentProvider {
+export class LndClient implements PaymentProvider, InvoiceProvider {
   private tlsCert: Buffer;
   private macaroon: string;
   private baseUrl: string;
@@ -139,5 +144,39 @@ export class LndClient implements PaymentProvider {
     paymentRequest: string,
   ): Promise<Record<string, unknown>> {
     return this.request("GET", `/v1/payreq/${paymentRequest}`);
+  }
+
+  /**
+   * Generates a BOLT11 invoice via POST /v1/invoices. LND returns the payment
+   * hash as base64 in `r_hash`; we convert to hex to match the rest of the API.
+   */
+  async createInvoice(options: CreateInvoiceOptions): Promise<Invoice> {
+    const body: Record<string, string> = {
+      value: String(options.amountSats),
+    };
+    if (options.memo !== undefined) body["memo"] = options.memo;
+    if (options.expirySeconds !== undefined) {
+      body["expiry"] = String(options.expirySeconds);
+    }
+
+    const response = await this.request<{
+      r_hash: string;
+      payment_request: string;
+    }>("POST", "/v1/invoices", body);
+
+    if (!response.payment_request || !response.r_hash) {
+      throw new Error("LND response missing payment_request or r_hash");
+    }
+
+    const invoice: Invoice = {
+      paymentRequest: response.payment_request,
+      paymentHash: Buffer.from(response.r_hash, "base64").toString("hex"),
+      amountSats: options.amountSats,
+    };
+    if (options.expirySeconds !== undefined) {
+      invoice.expiresAt =
+        Math.floor(Date.now() / 1000) + options.expirySeconds;
+    }
+    return invoice;
   }
 }

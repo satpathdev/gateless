@@ -6,6 +6,11 @@ import { Relay, useWebSocketImplementation } from "nostr-tools/relay";
 import type { Event } from "nostr-tools/core";
 
 import type { PaymentProvider, PaymentResult } from "./payment-provider.js";
+import type {
+  CreateInvoiceOptions,
+  Invoice,
+  InvoiceProvider,
+} from "./server/invoice-provider.js";
 import { L402PaymentError } from "./errors.js";
 
 export interface NwcConfig {
@@ -19,6 +24,12 @@ interface ParsedConnection {
   walletPubkey: string;
   relay: string;
   secret: Uint8Array;
+}
+
+interface Nip47Response {
+  result_type: string;
+  error?: { code: string; message: string };
+  result?: unknown;
 }
 
 /** NIP-47 request event kind */
@@ -95,13 +106,14 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 /**
- * NWC (Nostr Wallet Connect / NIP-47) payment provider.
- * Connects to any NWC-compatible wallet (Alby Hub, etc.) to pay Lightning invoices
- * via the Nostr relay specified in the connection string.
+ * NWC (Nostr Wallet Connect / NIP-47) client.
+ * Connects to any NWC-compatible wallet (Alby Hub, etc.) via a Nostr relay.
+ * Implements both PaymentProvider (payInvoice) and InvoiceProvider (createInvoice)
+ * - the same wallet is used for sending and receiving.
  *
- * Uses NIP-04 encryption as required by the NIP-47 specification.
+ * Uses NIP-04 encryption as required by NIP-47.
  */
-export class NwcClient implements PaymentProvider {
+export class NwcClient implements PaymentProvider, InvoiceProvider {
   private connection: ParsedConnection;
   private timeoutMs: number;
   private relay: Relay | undefined;
@@ -116,13 +128,65 @@ export class NwcClient implements PaymentProvider {
   }
 
   async payInvoice(paymentRequest: string): Promise<PaymentResult> {
+    const result = (await this.sendNip47Request("pay_invoice", {
+      invoice: paymentRequest,
+    })) as { preimage?: string };
+
+    const preimage = result.preimage;
+    if (!preimage) {
+      throw new L402PaymentError("NWC response missing preimage");
+    }
+
+    const paymentHash = createHash("sha256")
+      .update(hexToBytes(preimage))
+      .digest("hex");
+
+    return {
+      preimage,
+      paymentHash,
+      status: "SUCCEEDED",
+    };
+  }
+
+  async createInvoice(options: CreateInvoiceOptions): Promise<Invoice> {
+    const params: Record<string, unknown> = {
+      amount: options.amountSats * 1000, // NIP-47 make_invoice expects msats
+    };
+    if (options.memo !== undefined) params["description"] = options.memo;
+    if (options.expirySeconds !== undefined) {
+      params["expiry"] = options.expirySeconds;
+    }
+
+    const result = (await this.sendNip47Request("make_invoice", params)) as {
+      invoice?: string;
+      payment_hash?: string;
+      expires_at?: number;
+    };
+
+    if (!result.invoice || !result.payment_hash) {
+      throw new L402PaymentError(
+        "NWC make_invoice response missing invoice or payment_hash",
+      );
+    }
+
+    const invoice: Invoice = {
+      paymentRequest: result.invoice,
+      paymentHash: result.payment_hash,
+      amountSats: options.amountSats,
+    };
+    if (typeof result.expires_at === "number") {
+      invoice.expiresAt = result.expires_at;
+    }
+    return invoice;
+  }
+
+  private async sendNip47Request(
+    method: string,
+    params: Record<string, unknown>,
+  ): Promise<unknown> {
     const relay = await this.ensureRelay();
 
-    const requestContent = JSON.stringify({
-      method: "pay_invoice",
-      params: { invoice: paymentRequest },
-    });
-
+    const requestContent = JSON.stringify({ method, params });
     const encryptedContent = await encrypt(
       this.secretHex,
       this.connection.walletPubkey,
@@ -140,22 +204,30 @@ export class NwcClient implements PaymentProvider {
     );
 
     const responsePromise = this.waitForResponse(relay, requestEvent.id);
-
     await relay.publish(requestEvent);
+    const response = await responsePromise;
 
-    return responsePromise;
+    if (response.error) {
+      throw new L402PaymentError(
+        `NWC ${method} failed: ${response.error.message} (${response.error.code})`,
+      );
+    }
+    if (response.result === undefined) {
+      throw new L402PaymentError(`NWC ${method} response missing result`);
+    }
+    return response.result;
   }
 
   private async waitForResponse(
     relay: Relay,
     requestEventId: string,
-  ): Promise<PaymentResult> {
-    return new Promise<PaymentResult>((resolve, reject) => {
+  ): Promise<Nip47Response> {
+    return new Promise<Nip47Response>((resolve, reject) => {
       const timeout = setTimeout(() => {
         sub.close();
         reject(
           new L402PaymentError(
-            `NWC payment timed out after ${this.timeoutMs}ms`,
+            `NWC request timed out after ${this.timeoutMs}ms`,
           ),
         );
       }, this.timeoutMs);
@@ -173,8 +245,8 @@ export class NwcClient implements PaymentProvider {
             clearTimeout(timeout);
             sub.close();
             try {
-              const result = await this.handleResponse(event);
-              resolve(result);
+              const parsed = await this.decryptResponse(event);
+              resolve(parsed);
             } catch (error) {
               reject(error);
             }
@@ -184,7 +256,7 @@ export class NwcClient implements PaymentProvider {
     });
   }
 
-  private async handleResponse(event: Event): Promise<PaymentResult> {
+  private async decryptResponse(event: Event): Promise<Nip47Response> {
     let decrypted: string;
     try {
       decrypted = await decrypt(
@@ -197,39 +269,11 @@ export class NwcClient implements PaymentProvider {
       throw new L402PaymentError(`Failed to decrypt NWC response: ${msg}`);
     }
 
-    let response: {
-      result_type: string;
-      error?: { code: string; message: string };
-      result?: { preimage: string };
-    };
     try {
-      response = JSON.parse(decrypted) as typeof response;
+      return JSON.parse(decrypted) as Nip47Response;
     } catch {
       throw new L402PaymentError("NWC response is not valid JSON");
     }
-
-    if (response.error) {
-      throw new L402PaymentError(
-        `NWC payment failed: ${response.error.message} (${response.error.code})`,
-      );
-    }
-
-    const preimage = response.result?.preimage;
-    if (!preimage) {
-      throw new L402PaymentError("NWC response missing preimage");
-    }
-
-    // Derive payment hash from preimage via SHA-256
-    const preimageBytes = hexToBytes(preimage);
-    const paymentHash = createHash("sha256")
-      .update(preimageBytes)
-      .digest("hex");
-
-    return {
-      preimage,
-      paymentHash,
-      status: "SUCCEEDED",
-    };
   }
 
   private async ensureRelay(): Promise<Relay> {

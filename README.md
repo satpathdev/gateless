@@ -1,14 +1,19 @@
 # Gateless
 
-Sovereign L402 payments for AI agents on Lightning.
+Sovereign L402 payments on Lightning - both sides of the protocol, in one JavaScript library.
 
-Gateless is a JavaScript/TypeScript library that lets AI agents in Node.js autonomously pay for L402-protected web resources over the Lightning Network. Supports both the classic L402 protocol (macaroon + invoice) and Fewsats L402 v0.2 (offers + payment request). Connect your own LND node directly or any NWC-compatible wallet (Alby Hub, etc.). Your agent handles payments within spending limits you define. No accounts, no API keys, no identity - payment is authentication.
+Gateless is a TypeScript library for the L402 Lightning payment protocol:
+
+- **Client** - a drop-in `fetch()` replacement so AI agents in Node.js can autonomously pay for L402-protected resources. Supports classic L402 and Fewsats v0.2.
+- **Server** - a tiny middleware to monetise your own HTTP APIs with Lightning paywalls. Issues challenges, verifies tokens, plugs into any framework whose request/response objects duck-type like Express's.
+
+Connect your own LND node or any NWC-compatible wallet (Alby Hub, Mutiny, etc.). No custodian, no accounts, no API keys - payment is authentication.
 
 ## Why
 
-AI agents need to pay for things. The emerging solutions either lock you into custodial stablecoins ([x402](https://www.x402.org/)) or require shell access to Go CLI tools ([lnget](https://github.com/lightninglabs/lightning-agent-tools)). Neither works for a web developer building an agent in TypeScript.
+AI agents need to pay for things, and the people serving them need to get paid. The emerging solutions either lock both sides into custodial stablecoins ([x402](https://www.x402.org/)) or require shell access to Go CLI tools ([lnget](https://github.com/lightninglabs/lightning-agent-tools)) and separate Go binaries ([Aperture](https://github.com/lightninglabs/aperture)). Neither works for a web developer shipping in TypeScript.
 
-Gateless fills the gap: a self-contained JS/TS toolkit that connects to **your own LND node** or any **NWC-compatible wallet** (Alby Hub, etc.) and handles L402 payments programmatically. No custodian, no corporate infrastructure, your keys.
+Gateless fills both gaps in one package: a self-contained JS/TS toolkit that connects to **your own LND node** or any **NWC-compatible wallet** and handles the full L402 flow in both directions. No custodian, no corporate infrastructure, your keys.
 
 ## Install
 
@@ -112,6 +117,57 @@ const client = new L402Client({
 });
 ```
 
+## Monetise Your Own API (Server)
+
+The `@satpath/gateless/server` subpath turns any HTTP endpoint into an L402 paywall - the server-side mirror of the client. Five lines of Express:
+
+```typescript
+import express from "express";
+import { LndClient } from "@satpath/gateless";
+import { L402Server } from "@satpath/gateless/server";
+
+const lnd = new LndClient({
+  host: "127.0.0.1",
+  port: 8080,
+  tlsCertPath: "./creds/tls.cert",
+  macaroonPath: "./creds/invoice.macaroon",
+});
+
+const l402 = new L402Server({
+  secret: process.env.L402_SECRET!, // HMAC key used to sign macaroons
+  invoiceProvider: lnd,
+});
+
+const app = express();
+app.get("/premium", l402.protect({ priceSats: 100 }), (_req, res) => {
+  res.json({ data: "paid content" });
+});
+```
+
+`LndClient` and `NwcClient` both implement `InvoiceProvider` as well as `PaymentProvider` - the same wallet can send and receive. Swap the provider to receive via NWC:
+
+```typescript
+import { NwcClient } from "@satpath/gateless";
+
+const nwc = new NwcClient({ connectionString: "nostr+walletconnect://..." });
+const l402 = new L402Server({
+  secret: process.env.L402_SECRET!,
+  invoiceProvider: nwc,
+});
+```
+
+`protect()` returns a standard `(req, res, next)` middleware that works with Express, Hono (Node adapter), Fastify, and anything else that duck-types the same shape. For lower-level control use the core methods directly:
+
+```typescript
+const challenge = await l402.issueChallenge(100);
+// { macaroon, invoice, paymentHash, wwwAuthenticate, status: 402 }
+
+const result = l402.verifyAuthorization(req.headers.authorization);
+// { ok: true, paymentHash, priceSats } | { ok: false, reason }
+```
+
+Macaroons are HMAC-signed with your `secret` and carry the invoice's payment hash as a caveat. Verification checks the signature and confirms `sha256(preimage) === paymentHash` - no database lookup, no invoice-state tracking. Stateless merchants.
+
 ## Features
 
 **L402 Client** - Drop-in `fetch` wrapper that handles the full 402 → pay → retry flow automatically. Supports both classic L402 and Fewsats v0.2.
@@ -129,6 +185,8 @@ interface PaymentProvider {
   payInvoice(paymentRequest: string): Promise<PaymentResult>;
 }
 ```
+
+**L402 Server** - Mirror middleware for monetising your own APIs. Issues real BOLT11 invoices via `LndClient` or `NwcClient`, signs opaque macaroons with HMAC, verifies preimages statelessly. Plugs into Express, Hono, Fastify via a duck-typed `(req, res, next)` signature. Bring-your-own `InvoiceProvider` for CLN or custom backends.
 
 ## How L402 Works
 
@@ -187,6 +245,8 @@ No accounts. No passwords. No tracking. Payment is the authentication.
 
 ## Architecture
 
+### Client (paying side)
+
 ```
 ┌─────────────────────────────────────────┐
 │          Your Application               │
@@ -206,9 +266,40 @@ No accounts. No passwords. No tracking. Payment is the authentication.
 ┌────────────────▼────────────────────────┐
 │         PaymentProvider                 │
 │                                         │
-│  LndClient  │  NwcClient               │
-│  REST API   │  Nostr Wallet Connect    │
-└───────┬─────────────┬──────────────────┘
+│  LndClient  │  NwcClient                │
+│  REST API   │  Nostr Wallet Connect     │
+└───────┬─────────────┬───────────────────┘
+        │             │
+┌───────▼───────┐ ┌───▼──────────────────┐
+│ Your LND Node │ │ NWC Wallet           │
+│ (your keys)   │ │ (Alby Hub, etc.)     │
+└───────────────┘ └──────────────────────┘
+```
+
+### Server (receiving side)
+
+```
+┌─────────────────────────────────────────┐
+│    Your Express / Hono / Fastify App    │
+│                                         │
+│   app.get("/premium", l402.protect())   │
+└────────────────┬────────────────────────┘
+                 │
+┌────────────────▼────────────────────────┐
+│            L402Server                   │
+│                                         │
+│  ┌──────────────┐ ┌─────────────────┐   │
+│  │   Macaroon   │ │  Preimage       │   │
+│  │   Signer     │ │  Verifier       │   │
+│  └──────────────┘ └─────────────────┘   │
+└────────────────┬────────────────────────┘
+                 │
+┌────────────────▼────────────────────────┐
+│         InvoiceProvider                 │
+│                                         │
+│  LndClient  │  NwcClient                │
+│  /v1/invoices │ NIP-47 make_invoice     │
+└───────┬─────────────┬───────────────────┘
         │             │
 ┌───────▼───────┐ ┌───▼──────────────────┐
 │ Your LND Node │ │ NWC Wallet           │
@@ -238,11 +329,13 @@ Gateless and lnget are complementary. lnget is for terminal-based agents (Claude
 - ✅ Spending limits and rate controls
 - ✅ Fewsats L402 v0.2 support (offers, payment requests, pluggable offer strategy)
 - ✅ Nostr Wallet Connect (NWC) payment provider
+- ✅ Server-side middleware (Aperture alternative in JS, LND + NWC)
+- ⬜ Server-side Fewsats v0.2 (offers + payment_context_token)
 - ⬜ Lightning Node Connect (LNC) provider
+- ⬜ Core Lightning (CLN) provider
 - ⬜ Nostr endpoint discovery
 - ⬜ React hooks (`useL402Fetch`)
 - ⬜ Macaroon attenuation and inspection
-- ⬜ Server-side middleware (Aperture alternative in JS)
 
 ## Requirements
 
