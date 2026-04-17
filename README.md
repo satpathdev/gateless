@@ -73,6 +73,8 @@ nwc.close();
 
 Get the connection string from your wallet's NWC settings (usually under "App Connections" or "Nostr Wallet Connect").
 
+`NwcClient` works in the browser as of v0.4.0 - it detects `globalThis.WebSocket` and only falls back to the `ws` package in Node environments that don't have native WebSocket. Bundlers should alias `ws` out automatically via the `browser` field in our `package.json`.
+
 If the server returns `402 Payment Required`, Gateless automatically detects the protocol version and handles payment:
 
 **Classic L402** - Parses the `WWW-Authenticate` header, pays the invoice, caches the macaroon+preimage token, and retries with `Authorization: L402`. Second requests reuse the cached token.
@@ -330,6 +332,8 @@ Gateless and lnget are complementary. lnget is for terminal-based agents (Claude
 - ✅ Fewsats L402 v0.2 support (offers, payment requests, pluggable offer strategy)
 - ✅ Nostr Wallet Connect (NWC) payment provider
 - ✅ Server-side middleware (Aperture alternative in JS, LND + NWC)
+- ✅ Browser-compatible NwcClient (v0.4.0 - pay invoices from the browser via any NWC wallet)
+- ⬜ WebLN provider (complement to browser NWC)
 - ⬜ Server-side Fewsats v0.2 (offers + payment_context_token)
 - ⬜ Lightning Node Connect (LNC) provider
 - ⬜ Core Lightning (CLN) provider

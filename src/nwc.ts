@@ -280,9 +280,22 @@ export class NwcClient implements PaymentProvider, InvoiceProvider {
     if (this.relay?.connected) {
       return this.relay;
     }
-    // Register Node.js WebSocket for nostr-tools (no-op if already set)
-    const WebSocket = (await import("ws")).default;
-    useWebSocketImplementation(WebSocket);
+    // Prefer the `ws` package when available (Node environments - tested path).
+    // Fall back to globalThis.WebSocket in browsers, where bundlers are
+    // expected to alias `ws` out via the "browser" field in package.json.
+    let impl: unknown;
+    try {
+      const mod = await import("ws");
+      impl = mod.default;
+    } catch {
+      impl = (globalThis as { WebSocket?: unknown }).WebSocket;
+    }
+    if (!impl) {
+      throw new L402PaymentError(
+        "No WebSocket implementation available. In browsers, globalThis.WebSocket should exist. In Node, install `ws`.",
+      );
+    }
+    useWebSocketImplementation(impl as never);
     this.relay = await Relay.connect(this.connection.relay);
     return this.relay;
   }
