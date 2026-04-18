@@ -104,22 +104,24 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 /**
- * SHA-256 that works in browsers, Node 19+ (via globalThis.crypto.subtle),
- * and Node 18 (falls back to node:crypto).
+ * SHA-256 via globalThis.crypto.subtle. Available in all browsers and
+ * Node 18.17+. Avoids any node:* import so browser bundlers don't choke
+ * on unreachable-at-runtime branches.
  */
 async function sha256Hex(input: Uint8Array): Promise<string> {
   const subtle = (globalThis as { crypto?: { subtle?: SubtleCrypto } }).crypto
     ?.subtle;
-  if (subtle) {
-    // Runtime-safe but the TS lib tightened Uint8Array<ArrayBufferLike> vs
-    // Uint8Array<ArrayBuffer>. Re-box through a fresh ArrayBuffer to narrow.
-    const buf = new ArrayBuffer(input.byteLength);
-    new Uint8Array(buf).set(input);
-    const digest = await subtle.digest("SHA-256", buf);
-    return bytesToHex(new Uint8Array(digest));
+  if (!subtle) {
+    throw new L402PaymentError(
+      "SHA-256 requires globalThis.crypto.subtle (browsers and Node 18.17+)",
+    );
   }
-  const { createHash } = await import("node:crypto");
-  return createHash("sha256").update(input).digest("hex");
+  // Re-box through a fresh ArrayBuffer to narrow Uint8Array<ArrayBufferLike>
+  // to the Uint8Array<ArrayBuffer> that BufferSource now expects.
+  const buf = new ArrayBuffer(input.byteLength);
+  new Uint8Array(buf).set(input);
+  const digest = await subtle.digest("SHA-256", buf);
+  return bytesToHex(new Uint8Array(digest));
 }
 
 /**

@@ -1,6 +1,6 @@
 {
   "name": "@satpath/gateless",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "type": "module",
   "description": "Sovereign L402 on Lightning - client for AI agents, server middleware for merchants, browser-compatible NWC",
   "sideEffects": false,
@@ -51,7 +51,7 @@
     "url": "https://github.com/satpathdev/gateless"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18.17"
   },
   "devDependencies": {
     "@types/node": "^25.3.0",
