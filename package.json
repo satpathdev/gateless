@@ -1,6 +1,6 @@
 {
   "name": "@satpath/gateless",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "type": "module",
   "description": "Sovereign L402 on Lightning - client for AI agents, server middleware for merchants, browser-compatible NWC",
   "sideEffects": false,
@@ -14,6 +14,10 @@
     "./server": {
       "import": "./dist/server/index.js",
       "types": "./dist/server/index.d.ts"
+    },
+    "./nwc": {
+      "import": "./dist/nwc.js",
+      "types": "./dist/nwc.d.ts"
     }
   },
   "browser": {
