@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { encrypt, decrypt } from "nostr-tools/nip04";
 import { Relay, useWebSocketImplementation } from "nostr-tools/relay";
@@ -106,6 +104,25 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 /**
+ * SHA-256 that works in browsers, Node 19+ (via globalThis.crypto.subtle),
+ * and Node 18 (falls back to node:crypto).
+ */
+async function sha256Hex(input: Uint8Array): Promise<string> {
+  const subtle = (globalThis as { crypto?: { subtle?: SubtleCrypto } }).crypto
+    ?.subtle;
+  if (subtle) {
+    // Runtime-safe but the TS lib tightened Uint8Array<ArrayBufferLike> vs
+    // Uint8Array<ArrayBuffer>. Re-box through a fresh ArrayBuffer to narrow.
+    const buf = new ArrayBuffer(input.byteLength);
+    new Uint8Array(buf).set(input);
+    const digest = await subtle.digest("SHA-256", buf);
+    return bytesToHex(new Uint8Array(digest));
+  }
+  const { createHash } = await import("node:crypto");
+  return createHash("sha256").update(input).digest("hex");
+}
+
+/**
  * NWC (Nostr Wallet Connect / NIP-47) client.
  * Connects to any NWC-compatible wallet (Alby Hub, etc.) via a Nostr relay.
  * Implements both PaymentProvider (payInvoice) and InvoiceProvider (createInvoice)
@@ -137,9 +154,7 @@ export class NwcClient implements PaymentProvider, InvoiceProvider {
       throw new L402PaymentError("NWC response missing preimage");
     }
 
-    const paymentHash = createHash("sha256")
-      .update(hexToBytes(preimage))
-      .digest("hex");
+    const paymentHash = await sha256Hex(hexToBytes(preimage));
 
     return {
       preimage,

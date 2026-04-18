@@ -73,7 +73,7 @@ nwc.close();
 
 Get the connection string from your wallet's NWC settings (usually under "App Connections" or "Nostr Wallet Connect").
 
-`NwcClient` works in the browser as of v0.4.0 - it detects `globalThis.WebSocket` and only falls back to the `ws` package in Node environments that don't have native WebSocket. Bundlers should alias `ws` out automatically via the `browser` field in our `package.json`.
+`NwcClient` works in the browser as of v0.4.1 - it detects `globalThis.WebSocket` and only falls back to the `ws` package in Node environments that don't have native WebSocket. SHA-256 derivation uses `globalThis.crypto.subtle` with a `node:crypto` fallback for Node 18. Bundlers alias `ws` out via the `browser` field in our `package.json`, and `"sideEffects": false` lets them tree-shake the server-only modules out of browser builds.
 
 If the server returns `402 Payment Required`, Gateless automatically detects the protocol version and handles payment:
 
@@ -332,7 +332,7 @@ Gateless and lnget are complementary. lnget is for terminal-based agents (Claude
 - ✅ Fewsats L402 v0.2 support (offers, payment requests, pluggable offer strategy)
 - ✅ Nostr Wallet Connect (NWC) payment provider
 - ✅ Server-side middleware (Aperture alternative in JS, LND + NWC)
-- ✅ Browser-compatible NwcClient (v0.4.0 - pay invoices from the browser via any NWC wallet)
+- ✅ Browser-compatible NwcClient (v0.4.1 - pay invoices from the browser via any NWC wallet)
 - ⬜ WebLN provider (complement to browser NWC)
 - ⬜ Server-side Fewsats v0.2 (offers + payment_context_token)
 - ⬜ Lightning Node Connect (LNC) provider
